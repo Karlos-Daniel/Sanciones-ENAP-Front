@@ -1,6 +1,7 @@
 import type { Route } from "./+types/home";
 import { Welcome } from "../welcome/welcome";
 import type { LoginActionData } from "../models/auth";
+import { construirCookieSesion } from "../models/session";
 
 export function meta() {
   return [
@@ -23,14 +24,16 @@ export async function action({ request }: Route.ActionArgs) {
   const VALID_CEDULA = "1234567890";
   const VALID_PASSWORD = "123456";
 
-  // Login correcto → redirección a /dashboard
   if (cedula === VALID_CEDULA && password === VALID_PASSWORD) {
     console.log("LOGIN EXITOSO. Redirigiendo a /dashboard.");
+
+    const cookie = construirCookieSesion(cedula);
 
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/dashboard", // redirección
+        Location: "/dashboard",
+        "Set-Cookie": cookie,
       },
     });
   }
