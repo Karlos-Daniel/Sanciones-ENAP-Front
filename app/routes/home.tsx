@@ -15,24 +15,33 @@ export async function action({ request }: Route.ActionArgs) {
   const password = String(formData.get("password") || "");
   const remember = formData.get("remember") === "on";
 
+  console.log("DATOS RECIBIDOS DESDE EL FORMULARIO:");
+  console.log("Cedula:", cedula);
+  console.log("Contraseña:", password);
+  console.log("Recordar:", remember);
+
   const VALID_CEDULA = "1234567890";
   const VALID_PASSWORD = "123456";
 
+  // Login correcto → redirección a /dashboard
   if (cedula === VALID_CEDULA && password === VALID_PASSWORD) {
-    return new Response(
-      JSON.stringify({ cedula } satisfies LoginActionData),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    console.log("LOGIN EXITOSO. Redirigiendo a /dashboard.");
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: "/dashboard", // redirección
+      },
+    });
   }
+
+  console.log("LOGIN FALLIDO. Credenciales incorrectas.");
 
   return new Response(
     JSON.stringify({
       error: "Cédula o contraseña incorrectas.",
       cedula,
-    } satisfies LoginActionData),
+    } as LoginActionData),
     {
       status: 400,
       headers: { "Content-Type": "application/json" },

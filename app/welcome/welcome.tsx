@@ -33,7 +33,7 @@ export function Welcome() {
 
           {/* PANEL IZQUIERDO */}
           <section className="bg-[var(--color-dark)] px-8 py-10 flex flex-col gap-8 justify-between">
-            
+
             {/* Logo + texto */}
             <div className="space-y-6 flex flex-col justify-center items-center">
               <div className="w-40 md:w-48">
@@ -94,7 +94,7 @@ export function Welcome() {
               </header>
 
               <Form method="post" className="space-y-5" noValidate>
-                
+
                 {/* CEDULA */}
                 <div className="space-y-1.5">
                   <label
@@ -110,6 +110,13 @@ export function Welcome() {
                     required
                     autoComplete="off"
                     defaultValue={actionData?.cedula ?? ""}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={12}
+                    onInput={(e) => {
+                      const target = e.target as HTMLInputElement;
+                      target.value = target.value.replace(/\D+/g, ""); // Solo números
+                    }}
                     className="w-full rounded-xl border border-slate-300 bg-[var(--color-light)] px-3 py-2.5 text-sm text-[var(--color-dark)] outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition"
                     placeholder="1234567890"
                   />
