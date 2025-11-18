@@ -4,11 +4,7 @@ import type { Route } from "../+types/root";
 import { leerSesionDesdeCookie } from "../models/session";
 import { useLoaderData } from "react-router";
 
-import {
-  SANCIONES_INICIALES,
-  TIPOS_SANCION,
-  DURACIONES_SANCION,
-} from "../data/sanciones";
+import { SANCIONES_INICIALES } from "../data/sanciones";
 
 import type {
   Compania,
@@ -18,7 +14,14 @@ import type {
   DuracionSancionRef,
 } from "../models/types";
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+import {
+  obtenerCompanias,
+  obtenerTiposSancion,
+  obtenerDuracionesSancion,
+  obtenerCadetesPorCompania,
+  crearSancionRemota,
+  obtenerSancionesPorAlumno,
+} from "../services/api";
 
 export function meta() {
   return [
@@ -47,30 +50,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
 
-  const resp = await fetch(`${API_BASE_URL}/companiaGet`);
-  if (!resp.ok) {
-    throw new Response("Error cargando compañías", { status: 500 });
-  }
-
-  const raw = (await resp.json()) as { descripcion: string; uid: string }[];
-
-  const companias: Compania[] = raw.map((c, index) => ({
-    id: c.uid,
-    nombre: c.descripcion,
-    codigo: c.descripcion.slice(0, 3).toUpperCase(),
-    turno: String(index + 1),
-    color: ["#1d4ed8", "#16a34a", "#f97316", "#dc2626", "#7c3aed"][index % 5],
-    cadetes: [],
-    logoUrl: undefined,
-  }));
+  const [companias, tiposSancion, duracionesSancion] = await Promise.all([
+    obtenerCompanias(),
+    obtenerTiposSancion(),
+    obtenerDuracionesSancion(),
+  ]);
 
   return {
     cedula: session.cedula,
-    idAutoridad: session.idAutoridad,
+    idAutoridad: session.idAutoridad ?? "",
     companias,
     sanciones: SANCIONES_INICIALES,
-    tiposSancion: TIPOS_SANCION,
-    duracionesSancion: DURACIONES_SANCION,
+    tiposSancion,
+    duracionesSancion,
   } satisfies LoaderData;
 }
 
@@ -95,6 +87,11 @@ function hoyISODate(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+type Notificacion = {
+  tipo: "exito" | "error";
+  mensaje: string;
+};
 
 export default function Dashboard() {
   const {
@@ -131,6 +128,16 @@ export default function Dashboard() {
     Record<string, Cadete[]>
   >({});
 
+  const [sancionesCadete, setSancionesCadete] = useState<Sancion[]>([]);
+  const [cargandoSanciones, setCargandoSanciones] = useState(false);
+
+  const [filtroNombre, setFiltroNombre] = useState("");
+  const [filtroGrado, setFiltroGrado] = useState("");
+  const [filtroRol, setFiltroRol] = useState("");
+  const [filtroGuardia, setFiltroGuardia] = useState("");
+
+  const [notificacion, setNotificacion] = useState<Notificacion | null>(null);
+
   const companiaSeleccionada = companias.find(
     (c) => c.id === companiaSeleccionadaId
   );
@@ -145,6 +152,42 @@ export default function Dashboard() {
   );
   const tipoEsDTE = tipoSeleccionado?.descripcion === "DTE";
 
+  const opcionesDuracion = duracionesSancion.filter((d) =>
+    tipoEsDTE ? d.descripcion === "DIA" : d.descripcion !== "DIA"
+  );
+
+  const gradosDisponibles = Array.from(
+    new Set(cadetesCompaniaSeleccionada.map((c) => c.grado).filter(Boolean))
+  );
+  const rolesDisponibles = Array.from(
+    new Set(cadetesCompaniaSeleccionada.map((c) => c.rol).filter(Boolean))
+  );
+  const guardiasDisponibles = Array.from(
+    new Set(
+      cadetesCompaniaSeleccionada.map((c) => String(c.guardia)).filter(Boolean)
+    )
+  );
+
+  const cadetesFiltrados = cadetesCompaniaSeleccionada.filter((cadete) => {
+    const nombreCompleto = getNombreCompleto(cadete).toLowerCase();
+    if (
+      filtroNombre.trim() &&
+      !nombreCompleto.includes(filtroNombre.toLowerCase())
+    ) {
+      return false;
+    }
+    if (filtroGrado && cadete.grado !== filtroGrado) {
+      return false;
+    }
+    if (filtroRol && cadete.rol !== filtroRol) {
+      return false;
+    }
+    if (filtroGuardia && String(cadete.guardia) !== filtroGuardia) {
+      return false;
+    }
+    return true;
+  });
+
   useEffect(() => {
     if (!companiaSeleccionadaId) return;
     if (cadetesPorCompania[companiaSeleccionadaId]) return;
@@ -152,45 +195,18 @@ export default function Dashboard() {
     let cancelado = false;
 
     (async () => {
-      const resp = await fetch(
-        `${API_BASE_URL}/cd-companias/${companiaSeleccionadaId}`
-      );
-      if (!resp.ok) return;
+      try {
+        const cadetes = await obtenerCadetesPorCompania(
+          companiaSeleccionadaId
+        );
+        if (cancelado) return;
 
-      const raw = (await resp.json()) as {
-        nombre1: string;
-        nombre2?: string;
-        apellido1: string;
-        apellido2?: string;
-        cc: number;
-        grado: string | { _id: string; descripcion: string };
-        compania: { _id: string; descripcion: string };
-        guardia: number;
-        uid: string;
-        rol?: { _id: string; descripcion: string };
-      }[];
-
-      const cadetes: Cadete[] = raw.map((c) => ({
-        uid: c.uid,
-        nombre1: c.nombre1,
-        nombre2: c.nombre2 ?? "",
-        apellido1: c.apellido1,
-        apellido2: c.apellido2 ?? "",
-        cc: String(c.cc),
-        grado:
-          typeof c.grado === "string"
-            ? c.grado
-            : c.grado?.descripcion ?? "",
-        rol: c.rol?.descripcion ?? "",
-        guardia: c.guardia,
-      }));
-
-      if (cancelado) return;
-
-      setCadetesPorCompania((prev) => ({
-        ...prev,
-        [companiaSeleccionadaId]: cadetes,
-      }));
+        setCadetesPorCompania((prev) => ({
+          ...prev,
+          [companiaSeleccionadaId]: cadetes,
+        }));
+      } catch {
+      }
     })();
 
     return () => {
@@ -198,9 +214,50 @@ export default function Dashboard() {
     };
   }, [companiaSeleccionadaId, cadetesPorCompania]);
 
-  function abrirModalVer(cadete: Cadete) {
+  useEffect(() => {
+    if (!notificacion) return;
+    const t = setTimeout(() => {
+      setNotificacion(null);
+    }, 4000);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [notificacion]);
+
+  async function abrirModalVer(cadete: Cadete) {
     setCadeteSeleccionado(cadete);
     setModalVerAbierto(true);
+    setCargandoSanciones(true);
+    try {
+      const data = await obtenerSancionesPorAlumno(cadete.uid);
+      const mapeadas: Sancion[] = data.sanciones.map((s) => ({
+        _id: s.uid,
+        fecha: s.fecha,
+        estado: s.estado ? "ACTIVA" : "CUMPLIDA",
+        id_alumno: {
+          _id: s.ID_alumno._id,
+          nombre1: s.ID_alumno.nombre1,
+          apellido1: s.ID_alumno.apellido1,
+          apellido2: s.ID_alumno.apellido2,
+          guardia: s.ID_alumno.guardia,
+          cc: String(s.ID_alumno.cc),
+        },
+        id_tipo_sancion: {
+          _id: s.ID_tipo_sancion._id,
+          descripcion: s.ID_tipo_sancion.descripcion,
+        },
+        id_duracion: {
+          _id: s.ID_duracion_sancion._id,
+          descripcion: s.ID_duracion_sancion.descripcion,
+        },
+      }));
+
+      setSancionesCadete(mapeadas);
+    } catch {
+      setSancionesCadete([]);
+    } finally {
+      setCargandoSanciones(false);
+    }
   }
 
   function abrirModalAplicar(cadete: Cadete) {
@@ -212,29 +269,42 @@ export default function Dashboard() {
     setModalVerAbierto(false);
     setModalAplicarAbierto(false);
     setCadeteSeleccionado(null);
-  }
-
-  function sancionesDeCadeteActual(): Sancion[] {
-    if (!cadeteSeleccionado) return [];
-    return sancionesState.filter(
-      (s) => s.id_alumno.cc === cadeteSeleccionado.cc
-    );
+    setSancionesCadete([]);
   }
 
   async function manejarCrearSancion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!cadeteSeleccionado) return;
+    if (!idAutoridad) {
+      setNotificacion({
+        tipo: "error",
+        mensaje: "No se encontró el identificador de la autoridad en la sesión.",
+      });
+      return;
+    }
 
     const tipo = tiposSancion.find((t) => t._id === tipoSeleccionadoId);
-    if (!tipo) return;
+    if (!tipo) {
+      setNotificacion({
+        tipo: "error",
+        mensaje: "Tipo de sanción inválido.",
+      });
+      return;
+    }
 
     const descripcionDuracion =
-      tipo.descripcion === "DTE" ? "DÍA" : duracionSeleccionada;
+      tipo.descripcion === "DTE" ? "DIA" : duracionSeleccionada;
 
     const duracionRef = duracionesSancion.find(
       (d) => d.descripcion === descripcionDuracion
     );
-    if (!duracionRef) return;
+    if (!duracionRef) {
+      setNotificacion({
+        tipo: "error",
+        mensaje: "Duración de sanción inválida.",
+      });
+      return;
+    }
 
     const nuevo: Sancion = {
       _id: `tmp-${Date.now()}`,
@@ -259,46 +329,50 @@ export default function Dashboard() {
     };
 
     try {
-      await fetch(`${API_BASE_URL}/sancionesPost`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ID_alumno: cadeteSeleccionado.uid,
-          ID_autoridad: idAutoridad,
-          ID_tipo_sancion: tipo._id,
-          ID_duracion_sancion: duracionRef._id,
-          fecha: fechaNuevaSancion,
-        }),
+      await crearSancionRemota({
+        idAlumno: cadeteSeleccionado.uid,
+        idAutoridad,
+        idTipoSancion: tipo._id,
+        idDuracionSancion: duracionRef._id,
+        fecha: fechaNuevaSancion,
       });
 
       setSancionesState((prev) => [...prev, nuevo]);
       setModalAplicarAbierto(false);
+      setNotificacion({
+        tipo: "exito",
+        mensaje: "Sanción aplicada correctamente.",
+      });
     } catch {
-      setSancionesState((prev) => [...prev, nuevo]);
-      setModalAplicarAbierto(false);
+      setNotificacion({
+        tipo: "error",
+        mensaje: "No se pudo aplicar la sanción. Intenta nuevamente.",
+      });
     }
   }
 
   function marcarCumplida(id: string) {
+    setSancionesCadete((prev) =>
+      prev.map((s) => (s._id === id ? { ...s, estado: "CUMPLIDA" } : s))
+    );
     setSancionesState((prev) =>
       prev.map((s) => (s._id === id ? { ...s, estado: "CUMPLIDA" } : s))
     );
   }
 
   function eliminarSancion(id: string) {
+    setSancionesCadete((prev) => prev.filter((s) => s._id !== id));
     setSancionesState((prev) => prev.filter((s) => s._id !== id));
   }
 
   return (
-    <main className="min-h-screen bg-[var(--color-dark)] text-[var(--color-light)]">
-      <header className="flex items-center justify-between px-8 py-4 border-b border-[var(--color-primary)] bg-[var(--color-dark)]/90">
+    <main className="min-h-screen bg-(--color-dark) text-(--color-light)">
+      <header className="flex items-center justify-between px-8 py-4 border-b border-(--color-primary)">
         <div>
           <h1 className="text-xl font-semibold">
             Panel de administración - Escuadrón
           </h1>
-          <p className="text-sm text-[var(--color-light)]/70">
+          <p className="text-sm text-(--color-light)/70">
             Rol: Administrador · Sesión: {cedula}
           </p>
         </div>
@@ -306,7 +380,7 @@ export default function Dashboard() {
         <form method="post" action="/logout">
           <button
             type="submit"
-            className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-light)] hover:bg-[#355287] transition"
+            className="rounded-lg bg-(--color-primary) px-4 py-2 text-sm font-medium text-(--color-light) hover:bg-[#355287] transition"
           >
             Cerrar sesión
           </button>
@@ -314,9 +388,22 @@ export default function Dashboard() {
       </header>
 
       <section className="px-8 py-6 space-y-8">
+        {notificacion && (
+          <div
+            className={[
+              "rounded-lg border px-4 py-2 text-xs mb-2",
+              notificacion.tipo === "exito"
+                ? "bg-green-100 text-green-800 border-green-300"
+                : "bg-red-100 text-red-800 border-red-300",
+            ].join(" ")}
+          >
+            {notificacion.mensaje}
+          </div>
+        )}
+
         <div>
           <h2 className="text-lg font-semibold">Compañías del escuadrón</h2>
-          <p className="text-sm text-[var(--color-light)]/70">
+          <p className="text-sm text-(--color-light)/70">
             Selecciona una compañía para ver sus cadetes y gestionar sanciones.
           </p>
         </div>
@@ -331,10 +418,16 @@ export default function Dashboard() {
               <button
                 key={compania.id}
                 type="button"
-                onClick={() => setCompaniaSeleccionadaId(compania.id)}
+                onClick={() => {
+                  setCompaniaSeleccionadaId(compania.id);
+                  setFiltroNombre("");
+                  setFiltroGrado("");
+                  setFiltroRol("");
+                  setFiltroGuardia("");
+                }}
                 className={[
                   "flex flex-col justify-center rounded-2xl border-2 px-4 py-6 text-left shadow-sm transition",
-                  "bg-[var(--color-light)] text-[var(--color-dark)] hover:border-[var(--color-primary)]",
+                  "bg-(--color-light) text-(--color-dark) hover:border-(--color-primary)",
                 ].join(" ")}
                 style={
                   seleccionada
@@ -367,7 +460,7 @@ export default function Dashboard() {
         </div>
 
         {companiaSeleccionada && (
-          <div className="mt-4 rounded-2xl bg-[var(--color-light)] text-[var(--color-dark)] p-4 shadow-md">
+          <div className="mt-4 rounded-2xl bg-(--color-light) text-(--color-dark) p-4 shadow-md">
             <h3 className="text-sm font-semibold mb-2">
               Cadetes de {companiaSeleccionada.nombre}
             </h3>
@@ -377,10 +470,83 @@ export default function Dashboard() {
               sanciones por cadete.
             </p>
 
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end">
+              <div className="flex-1">
+                <label className="block text-xs font-medium mb-1">
+                  Buscar por nombre
+                </label>
+                <input
+                  type="text"
+                  value={filtroNombre}
+                  onChange={(e) => setFiltroNombre(e.target.value)}
+                  placeholder="Ej: Pérez"
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1">
+                  Grado
+                </label>
+                <select
+                  value={filtroGrado}
+                  onChange={(e) => setFiltroGrado(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
+                >
+                  <option value="">Todos</option>
+                  {gradosDisponibles.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1">
+                  Rol
+                </label>
+                <select
+                  value={filtroRol}
+                  onChange={(e) => setFiltroRol(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
+                >
+                  <option value="">Todos</option>
+                  {rolesDisponibles.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1">
+                  Guardia
+                </label>
+                <select
+                  value={filtroGuardia}
+                  onChange={(e) => setFiltroGuardia(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
+                >
+                  <option value="">Todas</option>
+                  {guardiasDisponibles.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               {cadetesCompaniaSeleccionada.length === 0 ? (
                 <p className="text-xs text-slate-600">
                   No hay cadetes cargados para esta compañía.
+                </p>
+              ) : cadetesFiltrados.length === 0 ? (
+                <p className="text-xs text-slate-600">
+                  No hay cadetes que cumplan los filtros seleccionados.
                 </p>
               ) : (
                 <table className="min-w-full text-xs border-collapse">
@@ -411,7 +577,7 @@ export default function Dashboard() {
                   </thead>
 
                   <tbody>
-                    {cadetesCompaniaSeleccionada.map((cadete) => (
+                    {cadetesFiltrados.map((cadete) => (
                       <tr key={cadete.uid} className="hover:bg-slate-50">
                         <td className="border border-slate-200 px-3 py-2 text-center">
                           {cadete.uid}
@@ -461,7 +627,7 @@ export default function Dashboard() {
 
         {modalVerAbierto && cadeteSeleccionado && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-xl w-full text-[var(--color-dark)]">
+            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-xl w-full text-(--color-dark)">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-semibold">
                   Sanciones de {getNombreCompleto(cadeteSeleccionado)}
@@ -475,7 +641,9 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {sancionesDeCadeteActual().length === 0 ? (
+              {cargandoSanciones ? (
+                <p className="text-xs text-slate-600">Cargando sanciones...</p>
+              ) : sancionesCadete.length === 0 ? (
                 <p className="text-xs text-slate-600">
                   No hay sanciones registradas para este alumno.
                 </p>
@@ -502,7 +670,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sancionesDeCadeteActual().map((s) => (
+                      {sancionesCadete.map((s) => (
                         <tr key={s._id} className="hover:bg-slate-50">
                           <td className="border border-slate-200 px-3 py-2">
                             {formatearFechaCorta(s.fecha)}
@@ -546,7 +714,7 @@ export default function Dashboard() {
 
         {modalAplicarAbierto && cadeteSeleccionado && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full text-[var(--color-dark)]">
+            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full text-(--color-dark)">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-semibold">
                   Aplicar sanción a {getNombreCompleto(cadeteSeleccionado)}
@@ -567,7 +735,7 @@ export default function Dashboard() {
                     type="date"
                     value={fechaNuevaSancion}
                     onChange={(e) => setFechaNuevaSancion(e.target.value)}
-                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
                     required
                   />
                 </div>
@@ -585,12 +753,12 @@ export default function Dashboard() {
                         (t) => t._id === nuevoTipoId
                       );
                       if (tipo?.descripcion === "DTE") {
-                        setDuracionSeleccionada("DÍA");
+                        setDuracionSeleccionada("DIA");
                       } else {
                         setDuracionSeleccionada("1");
                       }
                     }}
-                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
                     required
                   >
                     {tiposSancion.map((t) => (
@@ -609,10 +777,10 @@ export default function Dashboard() {
                   <select
                     value={duracionSeleccionada}
                     onChange={(e) => setDuracionSeleccionada(e.target.value)}
-                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                    className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
                     required
                   >
-                    {duracionesSancion.map((d) => (
+                    {opcionesDuracion.map((d) => (
                       <option key={d._id} value={d.descripcion}>
                         {d.descripcion}
                       </option>
@@ -630,7 +798,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     type="submit"
-                    className="rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-xs font-semibold text-[var(--color-light)] hover:bg-[#355287] transition"
+                    className="rounded-lg bg-(--color-primary) px-4 py-1.5 text-xs font-semibold text-(--color-light) hover:bg-[#355287] transition"
                   >
                     Aplicar sanción
                   </button>
