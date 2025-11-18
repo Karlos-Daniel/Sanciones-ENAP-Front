@@ -2,18 +2,19 @@ export const SESSION_COOKIE_NAME = "session_arc";
 
 export type SessionData = {
   cedula: string;
-  idAutoridad: string;
+  rol: string;
+  idAutoridad?: string;
+  idAlumno?: string;
 };
 
-export function crearValorSesion(cedula: string, idAutoridad: string): string {
-  const data: SessionData = { cedula, idAutoridad };
+export function crearValorSesion(data: SessionData): string {
   const json = JSON.stringify(data);
   const base64 = Buffer.from(json, "utf8").toString("base64url");
   return base64;
 }
 
-export function construirCookieSesion(cedula: string, idAutoridad: string): string {
-  const value = crearValorSesion(cedula, idAutoridad);
+export function construirCookieSesion(data: SessionData): string {
+  const value = crearValorSesion(data);
   return [
     `${SESSION_COOKIE_NAME}=${value}`,
     "Path=/",
@@ -47,12 +48,9 @@ export function leerSesionDesdeCookie(
   const value = cookie.substring(SESSION_COOKIE_NAME.length + 1);
   try {
     const json = Buffer.from(value, "base64url").toString("utf8");
-    const data = JSON.parse(json) as Partial<SessionData>;
-    if (!data.cedula) return null;
-    return {
-      cedula: String(data.cedula),
-      idAutoridad: String(data.idAutoridad ?? ""),
-    };
+    const data = JSON.parse(json) as SessionData;
+    if (!data.cedula || !data.rol) return null;
+    return data;
   } catch {
     return null;
   }

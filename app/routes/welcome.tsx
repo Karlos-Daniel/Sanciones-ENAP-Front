@@ -1,5 +1,5 @@
 import { Form, useActionData, useNavigation } from "react-router";
-import type { LoginActionData } from "../models/auth";
+import type { LoginActionData } from "../models/types/auth";
 
 const LOGO_URL =
   "https://www.reservanavalcolombia.co/wp-content/uploads/2025/07/ESCUDO-ARMADA-Horizontal-Azul.png";
