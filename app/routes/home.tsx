@@ -1,7 +1,8 @@
 import type { Route } from "./+types/home";
-import { Welcome } from "./welcome";
-import type { LoginActionData } from "../models/types/auth";
 import { construirCookieSesion } from "../models/session";
+import type { SessionData } from "../models/session";
+import type { LoginActionData } from "~/models/types";
+import { Welcome } from "./welcome";
 
 export function meta() {
   return [
@@ -18,12 +19,7 @@ export async function action({ request }: Route.ActionArgs) {
   const password = String(formData.get("password") || "");
   const remember = formData.get("remember") === "on";
 
-  console.log("Cedula (frontend):", cedula);
-  console.log("Recordar:", remember);
-  console.log("API_BASE_URL:", API_BASE_URL);
-
   if (!API_BASE_URL) {
-    console.error("VITE_BACKEND_URL no está definida.");
     return new Response(
       JSON.stringify({
         error:
@@ -49,42 +45,33 @@ export async function action({ request }: Route.ActionArgs) {
       }),
     });
 
-    console.log("Respuesta del backend /login:", respuesta.status);
-
     if (respuesta.ok) {
       const data = await respuesta.json().catch(() => null);
-      console.log("Payload backend:", data);
 
-      const ccFromApi =
-        (data && (data.cc ?? data.cedula ?? data.documento)) ?? cedula;
+      const rol = String(data?.rol ?? "");
+      const userId = String(data?.ID_autoridad ?? "");
+      const token = data?.token ? String(data.token) : "";
 
-      const backendRolRaw = data?.rol ?? "user";
-      const rol = String(backendRolRaw).toLowerCase();
-
-      const idAutoridad: string | undefined = data?.ID_autoridad ?? undefined;
-      const idAlumno: string | undefined = data?.ID_alumno ?? undefined;
-
-      const cookie = construirCookieSesion({
-        cedula: String(ccFromApi),
+      const sessionData: SessionData = {
+        cedula,
         rol,
-        idAutoridad,
-        idAlumno,
-      });
+        userId,
+        token,
+      };
 
-      const destino = rol === "admin" ? "/dashboard" : "/mis-sanciones";
+      const cookie = construirCookieSesion(sessionData);
 
       return new Response(null, {
         status: 302,
         headers: {
-          Location: destino,
+          Location:
+            rol.toLowerCase() === "admin" ? "/dashboard" : "/mis-sanciones",
           "Set-Cookie": cookie,
         },
       });
-
     }
 
     if (respuesta.status === 400 || respuesta.status === 401) {
-      console.log("LOGIN FALLIDO EN BACKEND. Credenciales incorrectas.");
       return new Response(
         JSON.stringify({
           error: "Cédula o contraseña incorrectas.",
@@ -97,7 +84,6 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
 
-    console.error("Error inesperado del backend:", respuesta.status);
     return new Response(
       JSON.stringify({
         error: "Error inesperado al validar las credenciales.",
@@ -108,8 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
         headers: { "Content-Type": "application/json" },
       }
     );
-  } catch (error) {
-    console.error("Error de red al llamar /login en el backend:", error);
+  } catch {
     return new Response(
       JSON.stringify({
         error:

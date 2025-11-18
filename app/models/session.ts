@@ -3,8 +3,8 @@ export const SESSION_COOKIE_NAME = "session_arc";
 export type SessionData = {
   cedula: string;
   rol: string;
-  idAutoridad?: string;
-  idAlumno?: string;
+  userId: string;
+  token?: string;
 };
 
 export function crearValorSesion(data: SessionData): string {
@@ -49,7 +49,7 @@ export function leerSesionDesdeCookie(
   try {
     const json = Buffer.from(value, "base64url").toString("utf8");
     const data = JSON.parse(json) as SessionData;
-    if (!data.cedula || !data.rol) return null;
+    if (!data.cedula || !data.rol || !data.userId) return null;
     return data;
   } catch {
     return null;

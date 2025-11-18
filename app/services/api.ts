@@ -161,3 +161,19 @@ export async function crearSancionRemota(params: {
     throw new Error("Error al crear la sanción");
   }
 }
+
+export async function actualizarEstadoSancion(
+  sancionId: string,
+  nuevoEstado: boolean
+): Promise<boolean> {
+  const resp = await fetch(`${API_BASE_URL}/sancionesPut/${sancionId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ estado: nuevoEstado })
+  });
+
+  return resp.ok;
+}
+
