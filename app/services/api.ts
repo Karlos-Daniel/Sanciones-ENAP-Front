@@ -15,14 +15,21 @@ export async function obtenerCompanias(): Promise<Compania[]> {
 
   const raw = (await resp.json()) as { descripcion: string; uid: string }[];
 
-  const colores = ["#1d4ed8", "#16a34a", "#f97316", "#dc2626", "#7c3aed"];
+  const colores = {
+    Binney: "#facc15",
+    Tono: "#dc2626",
+    Brion: "#16a34a",
+    Valenzuela: "#9ca3af",
+    Padilla: "#2563eb",
+    Cuadros: "#000000",
+  };
 
   const companias: Compania[] = raw.map((c, index) => ({
     id: c.uid,
     nombre: c.descripcion,
     codigo: c.descripcion.slice(0, 3).toUpperCase(),
     turno: String(index + 1),
-    color: colores[index % colores.length],
+    color: colores[c.descripcion as keyof typeof colores],
     cadetes: [],
     logoUrl: undefined,
   }));

@@ -45,7 +45,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const rolSesion = String(session.rol || "").toLowerCase();
 
-  if (rolSesion === "admin") {
+  if (rolSesion === "superadmin") {
     return redirect("/dashboard");
   }
 
