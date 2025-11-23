@@ -12,6 +12,20 @@ type CadeteFiltersProps = {
   onFiltroGuardia: (v: string) => void;
 };
 
+// Normaliza un grado/rol cualquiera a STRING mayúscula sin espacios
+function normalizarCampo(v: unknown): string {
+  if (!v) return "";
+  if (typeof v === "string") return v.trim().toUpperCase();
+
+  // Caso GradoRef u objetos similares { descripcion: string }
+  if (typeof v === "object" && "descripcion" in (v as any)) {
+    const desc = (v as any).descripcion;
+    return typeof desc === "string" ? desc.trim().toUpperCase() : "";
+  }
+
+  return String(v).trim().toUpperCase();
+}
+
 export function CadeteFilters({
   cadetes,
   filtroNombre,
@@ -24,13 +38,27 @@ export function CadeteFilters({
   onFiltroGuardia,
 }: CadeteFiltersProps) {
   const gradosDisponibles = Array.from(
-    new Set(cadetes.map((c) => c.grado).filter(Boolean))
+    new Set(
+      cadetes
+        .map((c) => normalizarCampo(c.grado))
+        .filter((g) => g.length > 0)
+    )
   );
+
   const rolesDisponibles = Array.from(
-    new Set(cadetes.map((c) => c.rol).filter(Boolean))
+    new Set(
+      cadetes
+        .map((c) => normalizarCampo(c.rol))
+        .filter((r) => r.length > 0)
+    )
   );
+
   const guardiasDisponibles = Array.from(
-    new Set(cadetes.map((c) => String(c.guardia)).filter(Boolean))
+    new Set(
+      cadetes
+        .map((c) => String(c.guardia))
+        .filter((g) => g.length > 0)
+    )
   );
 
   return (
@@ -44,7 +72,7 @@ export function CadeteFilters({
           value={filtroNombre}
           onChange={(e) => onFiltroNombre(e.target.value)}
           placeholder="Ej: Pérez"
-          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
         />
       </div>
 
@@ -53,7 +81,7 @@ export function CadeteFilters({
         <select
           value={filtroGrado}
           onChange={(e) => onFiltroGrado(e.target.value)}
-          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
         >
           <option value="">Todos</option>
           {gradosDisponibles.map((g) => (
@@ -69,7 +97,7 @@ export function CadeteFilters({
         <select
           value={filtroRol}
           onChange={(e) => onFiltroRol(e.target.value)}
-          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
         >
           <option value="">Todos</option>
           {rolesDisponibles.map((r) => (
@@ -85,7 +113,7 @@ export function CadeteFilters({
         <select
           value={filtroGuardia}
           onChange={(e) => onFiltroGuardia(e.target.value)}
-          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-(--color-primary)"
         >
           <option value="">Todas</option>
           {guardiasDisponibles.map((g) => (

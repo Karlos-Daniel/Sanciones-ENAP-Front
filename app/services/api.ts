@@ -3,9 +3,23 @@ import type {
   Cadete,
   TipoSancionRef,
   DuracionSancionRef,
+  GradoRef,
 } from "../models/types";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+type RawCadeteApi = {
+  nombre1: string;
+  nombre2?: string;
+  apellido1: string;
+  apellido2?: string;
+  cc: number;
+  grado: string | GradoRef;
+  compania: { _id: string; descripcion: string };
+  guardia: number;
+  uid: string;
+  rol?: { _id: string; descripcion: string };
+};
 
 export async function obtenerCompanias(): Promise<Compania[]> {
   const resp = await fetch(`${API_BASE_URL}/companiaGet`);
@@ -73,18 +87,7 @@ export async function obtenerCadetesPorCompania(
     throw new Error("Error cargando cadetes");
   }
 
-  const raw = (await resp.json()) as {
-    nombre1: string;
-    nombre2?: string;
-    apellido1: string;
-    apellido2?: string;
-    cc: number;
-    grado: { _id: string; descripcion: string };
-    compania: { _id: string; descripcion: string };
-    guardia: number;
-    uid: string;
-    rol?: { _id: string; descripcion: string };
-  }[];
+  const raw = (await resp.json()) as RawCadeteApi[];
 
   return raw.map((c) => ({
     uid: c.uid,
@@ -93,7 +96,10 @@ export async function obtenerCadetesPorCompania(
     apellido1: c.apellido1,
     apellido2: c.apellido2 ?? "",
     cc: String(c.cc),
-    grado: c.grado.descripcion,
+    grado:
+      typeof c.grado === "string"
+        ? c.grado
+        : c.grado?.descripcion ?? "",
     rol: c.rol?.descripcion ?? "",
     guardia: c.guardia,
   }));

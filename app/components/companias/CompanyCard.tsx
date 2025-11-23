@@ -1,29 +1,27 @@
-import type { Compania, Cadete } from "../../models/types";
+import type { Compania } from "../../models/types";
 
-type CompanyGridProps = {
+type CompanyCardsProps = {
   companias: Compania[];
-  cadetesPorCompania: Record<string, Cadete[]>;
   companiaSeleccionadaId: string;
-  onSeleccionarCompania: (id: string) => void;
+  onSelectCompania: (id: string) => void;
 };
 
-export function CompanyGrid({
+export function CompanyCards({
   companias,
-  cadetesPorCompania,
   companiaSeleccionadaId,
-  onSeleccionarCompania,
-}: CompanyGridProps) {
+  onSelectCompania,
+}: CompanyCardsProps) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       {companias.map((compania) => {
         const seleccionada = compania.id === companiaSeleccionadaId;
-        const cantidadCadetes = cadetesPorCompania[compania.id]?.length ?? 0;
+        const cantidadCadetes = compania.cadetes?.length ?? 0;
 
         return (
           <button
             key={compania.id}
             type="button"
-            onClick={() => onSeleccionarCompania(compania.id)}
+            onClick={() => onSelectCompania(compania.id)}
             className={[
               "flex flex-col justify-center rounded-2xl border-2 px-4 py-6 text-left shadow-sm transition",
               "bg-[var(--color-light)] text-[var(--color-dark)] hover:border-[var(--color-primary)]",
